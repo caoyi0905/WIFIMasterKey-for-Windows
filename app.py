@@ -6,6 +6,7 @@ from flask import Flask, request, render_template, session, flash, redirect, \
 	url_for, jsonify
 from task import *
 import wifi as wifilib
+import subprocess
 import re
 import sys
 reload(sys)
@@ -30,29 +31,36 @@ def index():
 @app.route('/text', methods=['GET', 'POST'])
 def text():
 	if request.method == 'POST':
-		if request.form['text']:
+		p = subprocess.Popen('netsh wlan show network mode=bssid', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+		res=''
+		for line in p.stdout.readlines():
+			res+=line
+        if True or request.form['text']:
 			#for mac: airport -s
 			pattern1 = r"\s*(.*)\s+(([0-9a-f]{2}:){5}[0-9a-f]{2})"
 			#for windows: powershell or cmd -- netsh wlan show network mode=bssid
 			pattern2 = r"SSID \d{1,2} : (.*)\n.*\n.*\n.*\n.*(([0-9a-f]{2}:){5}[0-9a-f]{2})"
 			#order is very important!
-			if  re.compile(pattern2, re.M).findall(request.form['text']):
+			if  re.compile(pattern2, re.M).findall(res):
 				pattern = pattern2
 			else:
 				pattern = pattern1
 
 			ssid = []
 			bssid = []
-			for ss, bss, dummy in re.compile(pattern, re.M).findall(request.form['text']):
-				ssid.append(ss)
+			for ss, bss, dummy in re.compile(pattern, re.M).findall(res):
+				ssid.append(ss.strip('\r'))
 				bssid.append(bss)
+			print ssid,bssid,'done'
 			if len(ssid) == 0 or len(bssid) == 0:
 				return redirect(url_for('index'))
 			w = wifilib.wifi()
 			wifi = w.query(ssid, bssid)
+			print wifi,'done'
 			if wifi['err']:
 				return jsonify({'total':0, 'err':wifi['err'], 'msg':wifi['msg']})
 			total = len(wifi['ssid'])
+			print total,'done'
 			if total == 0:
 				return jsonify({'total':0, 'err':0, 'msg':'not found!'})
 			task = query_task.apply_async((wifi['ssid'], wifi['bssid']))
